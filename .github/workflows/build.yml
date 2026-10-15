@@ -29,34 +29,27 @@ jobs:
         with:
           gradle-version: '8.7'
 
-           - name: Install Android SDK
+      - name: Install Android SDK
         run: |
-          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          SDK_DIR="$HOME/android-sdk"
+          mkdir -p "$SDK_DIR/cmdline-tools"
 
           curl -fsSL \
-            https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip \
-            -o /tmp/cmdline-tools.zip
+            "https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip" \
+            -o /tmp/android-tools.zip
 
-          unzip -q /tmp/cmdline-tools.zip -d /tmp/android-tools
+          unzip -q /tmp/android-tools.zip -d /tmp/android-extracted
+          mv /tmp/android-extracted/cmdline-tools "$SDK_DIR/cmdline-tools/latest"
 
-          mv /tmp/android-tools/cmdline-tools "$ANDROID_HOME/cmdline-tools/latest"
+          SDKMANAGER="$SDK_DIR/cmdline-tools/latest/bin/sdkmanager"
 
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+          "$SDKMANAGER" --sdk_root="$SDK_DIR" \
+            "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            --sdk_root="$ANDROID_HOME" --licenses || true
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
 
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            --sdk_root="$ANDROID_HOME" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-
-      - name: Build APK
+      - name: Build debug APK
         run: gradle assembleDebug --stacktrace
 
       - name: Upload APK
@@ -64,3 +57,4 @@ jobs:
         with:
           name: Einthusan-TV-PIJIN-APK
           path: EinthusanTV-PIJIN-Edition/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
