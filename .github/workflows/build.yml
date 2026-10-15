@@ -8,11 +8,12 @@ on:
 
 jobs:
   build:
+    name: Build PIJIN Edition v0.2
     runs-on: ubuntu-24.04
 
     defaults:
       run:
-        working-directory: EinthusanTV-PIJIN-Edition
+        working-directory: EinthusanTV-PIJIN-v02
 
     steps:
       - name: Checkout repository
@@ -30,6 +31,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Install Android SDK and accept licences
+        shell: bash
         run: |
           set -e
 
@@ -62,13 +64,20 @@ jobs:
 
           echo "Android SDK installed successfully."
 
-      - name: Build PIJIN Edition APK
+      - name: Verify project files
+        run: |
+          echo "Checking PIJIN Edition v0.2 project..."
+          ls -la
+          test -f settings.gradle || test -f settings.gradle.kts
+          test -d app
+
+      - name: Build PIJIN Edition v0.2 APK
         run: gradle assembleDebug --stacktrace
 
-      - name: Upload PIJIN Edition APK
+      - name: Upload PIJIN Edition v0.2 APK
         uses: actions/upload-artifact@v4
         with:
-          name: Einthusan-TV-PIJIN-APK
-          path: EinthusanTV-PIJIN-Edition/app/build/outputs/apk/debug/*.apk
+          name: Einthusan-TV-PIJIN-v0.2-APK
+          path: EinthusanTV-PIJIN-v02/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
