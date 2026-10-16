@@ -108,50 +108,83 @@ public final class EinthusanClient {
         if(referer!=null) c.setRequestProperty("Referer",referer);
         return request(c,null);
     }
+    /** Parses film links independently of the website's surrounding card markup. */
     public Page browse(String url) throws Exception {
         String safe = absolute(url);
         if (safe.isEmpty() || !safe.contains("/movie/")) throw new Exception("Invalid browse URL");
-        Document doc = Jsoup.parse(get(safe,BASE), BASE);
+        Document doc = Jsoup.parse(get(safe, BASE), BASE);
         ArrayList<Film> films = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        boolean featured = safe.contains("/movie/browse/");
-        Elements cards = featured ? doc.select("[name=newrelease_tab]") : doc.select(".block1");
-        if (cards.isEmpty()) cards = doc.select("a[href*='/movie/watch/']");
-        for(Element card : cards) {
-            Element a=card.is("a[href*='/movie/watch/']") ? card : card.selectFirst("a[href*='/movie/watch/']");
-            if(a==null) continue;
-            String watch=absolute(a.attr("abs:href").isEmpty()?a.attr("href"):a.attr("abs:href"));
-            if(watch.isEmpty() || !watch.contains("/movie/watch/")) continue;
-            Uri u=Uri.parse(watch);
-            String lang=u.getQueryParameter("lang");
-            String path=u.getPath();
-            if(path==null) continue;
-            String[] parts=path.split("/");
-            if(parts.length<4 || TextUtils.isEmpty(lang) || !lang.matches("[a-zA-Z]+")) continue;
-            String id=parts[3];
-            if(!id.matches("[a-zA-Z0-9_-]+") || !seen.add(lang+":"+id)) continue;
-            Element h = card.selectFirst("h3,h2");
-            if (h==null) h = a.selectFirst("h3,h2");
-            String title=(h==null?a.text():h.text()).trim();
-            if(title.isEmpty()) title=a.attr("title");
-            if(title.isEmpty()) continue;
-            Element p=card.selectFirst(".synopsis");
-            String desc=p==null?"":p.text();
-            String poster=imageOf(card);
-            if(poster.isEmpty()) poster=imageOf(a);
-            String quality=card.html().contains("ultrahd")?"uhd":"shd";
-            films.add(new Film(id,lang,title,poster,desc,watch,quality));
+        int watchLinks = 0;
+        int rejected = 0;
+        String fallbackLang = Uri.parse(safe).getQueryParameter("lang");
+
+        // EinTamil uses .block1 on results and newrelease_tab on featured pages.
+        // Those wrappers are not essential: identify films from watch links instead.
+        for (Element a : doc.select("a[href]")) {
+            String href = a.attr("href");
+            if (!href.contains("movie/watch/")) continue;
+            watchLinks++;
+            String watch = absolute(href);
+            if (watch.isEmpty()) { rejected++; continue; }
+            Uri uri = Uri.parse(watch);
+            List<String> segments = uri.getPathSegments();
+            if (segments.size() < 3 || !"movie".equals(segments.get(0)) ||
+                !"watch".equals(segments.get(1))) { rejected++; continue; }
+            String id = segments.get(2);
+            String language = uri.getQueryParameter("lang");
+            if (TextUtils.isEmpty(language)) language = fallbackLang;
+            if (TextUtils.isEmpty(language) || !language.matches("[a-zA-Z]+") ||
+                !id.matches("[a-zA-Z0-9_-]+")) { rejected++; continue; }
+            if (!seen.add(language + ":" + id)) continue;
+
+            Element card = a.closest(".block1,li,.movie,.movie-card,.movie-item");
+            if (card == null) card = a.parent() == null ? a : a.parent();
+            Element heading = card.selectFirst("h3,h2,.movie-title,.title");
+            String title = heading == null ? "" : heading.text().trim();
+            if (title.isEmpty()) title = a.attr("title").trim();
+            if (title.isEmpty()) title = a.text().trim();
+            if (title.isEmpty()) {
+                Element img = a.selectFirst("img[alt]");
+                if (img == null) img = card.selectFirst("img[alt]");
+                if (img != null) title = img.attr("alt").trim();
+            }
+            if (title.isEmpty()) title = "Movie " + id;
+            Element synopsis = card.selectFirst(".synopsis,.summary,.description");
+            String description = synopsis == null ? "" : synopsis.text();
+            String poster = imageOf(card);
+            if (poster.isEmpty()) poster = imageOf(a);
+            String quality = card.outerHtml().toLowerCase(Locale.ROOT).contains("ultrahd") ? "uhd" : "shd";
+            films.add(new Film(id, language, title, poster, description, watch, quality));
         }
-        String next="";
-        for(Element a: doc.select("a[href]")) {
-            String text=a.text().trim().toLowerCase(Locale.ROOT);
-            if((text.equals("next")||text.endsWith("next")||a.attr("rel").equals("next")) && !a.attr("data-disabled").equals("true")) {
-                String candidate=absolute(a.attr("href"));
-                if(!candidate.isEmpty()&&candidate.contains("/movie/")) next=candidate;
+        String next = "";
+        for (Element a : doc.select("a[href]")) {
+            String label = a.text().trim().toLowerCase(Locale.ROOT);
+            String rel = a.attr("rel").toLowerCase(Locale.ROOT);
+            if ((rel.contains("next") || label.equals("next") || label.endsWith("next") ||
+                 label.contains("›") || label.contains("»")) &&
+                 !"true".equalsIgnoreCase(a.attr("data-disabled"))) {
+                String candidate = absolute(a.attr("href"));
+                if (!candidate.isEmpty() && candidate.contains("/movie/") && !candidate.equals(safe)) {
+                    next = candidate;
+                    break;
+                }
             }
         }
-        if(films.isEmpty()) throw new Exception("No films recognised. Einthusan's page layout or access may have changed.");
-        return new Page(films,next);
+        if (films.isEmpty()) {
+            String title = doc.title().replaceAll("\\s+", " ").trim();
+            if (title.length() > 65) title = title.substring(0, 65);
+            String body = doc.body() == null ? "" : doc.body().text().toLowerCase(Locale.ROOT);
+            if (body.contains("captcha") || body.contains("verify you are human") ||
+                body.contains("access denied") || body.contains("security check") ||
+                body.contains("checking your browser")) {
+                throw new Exception("Einthusan returned an access/verification page instead of movie listings.");
+            }
+            throw new Exception("No movies in response (watch links: " + watchLinks +
+                ", rejected: " + rejected + ", blocks: " + doc.select(".block1").size() +
+                ", title: " + title + "). Different HTML or access restrictions may be involved.");
+        }
+        return new Page(films, next);
     }
 
     private static String encode(String v) throws Exception { return URLEncoder.encode(v,"UTF-8"); }
