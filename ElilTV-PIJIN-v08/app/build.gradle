@@ -1,8 +1,11 @@
-plugins { id 'com.android.application' }
+plugins {
+    id 'com.android.application'
+}
 
 android {
     namespace 'com.example.einthusantv'
     compileSdk 35
+
     defaultConfig {
         applicationId 'com.example.einthusantv'
         minSdk 23
@@ -10,10 +13,21 @@ android {
         versionCode 10
         versionName '0.8'
     }
-    buildFeatures { buildConfig true }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    // Temporary exemption for private Firestick sideloading.
+    // Keep other Android lint checks enabled.
+    lint {
+        disable += ['ExpiredTargetSdkVersion']
+    }
+
     signingConfigs {
         official {
             def ks = System.getenv('ELIL_KEYSTORE_FILE')
+
             if (ks) {
                 storeFile file(ks)
                 storePassword System.getenv('ELIL_KEYSTORE_PASSWORD')
@@ -22,13 +36,18 @@ android {
             }
         }
     }
+
     buildTypes {
         release {
             minifyEnabled false
             signingConfig signingConfigs.official
         }
     }
-    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
 }
 
 dependencies {
