@@ -1,0 +1,43 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.example.einthusantv'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.example.einthusantv'
+        minSdk 23
+        targetSdk 28
+        versionCode 21
+        versionName '0.9.9'
+    }
+    buildFeatures { buildConfig true }
+    // The app is privately sideloaded on Fire TV; changing targetSdk behavior
+    // requires separate compatibility testing. Disable ONLY this release-lint gate.
+    lint { disable += ['ExpiredTargetSdkVersion'] }
+    signingConfigs {
+        official {
+            def ks = System.getenv('ELIL_KEYSTORE_FILE')
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('ELIL_KEYSTORE_PASSWORD')
+                keyAlias 'elil-tv'
+                keyPassword System.getenv('ELIL_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.official
+        }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies {
+    implementation 'org.jsoup:jsoup:1.18.3'
+    implementation 'androidx.core:core:1.13.1'
+    implementation 'androidx.media3:media3-exoplayer:1.5.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.5.1'
+    implementation 'androidx.media3:media3-ui:1.5.1'
+}
